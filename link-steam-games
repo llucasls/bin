@@ -4,6 +4,7 @@ import csv
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 desktop_dir = Path("~/Desktop").expanduser()
 config_dir = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
@@ -40,25 +41,34 @@ def parse_entry(entry: configparser.SectionProxy) -> tuple[str, str] | None:
     return gameid, name
 
 
-def main():
+def read_desktop_dir() -> None:
+    """
+    Seek out .desktop files at ~/Desktop and parse the ones that
+    correspond to Steam games. Parsed files are recorded at a CSV
+    configuration file then deleted. At the end of the function, if the
+    directory is empty, it is also removed.
+    """
     config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     config_file.touch(mode=0o600, exist_ok=True)
 
     if not desktop_dir.exists():
-        print("Desktop directory does not exist", file=sys.stderr)
-        return 1
+        raise FileNotFoundError("Desktop directory does not exist")
 
     for file in desktop_dir.iterdir():
         if not file.name.endswith(".desktop"):
             continue
 
-        entry = parse_desktop_file(file)
+        entry: configparser.SectionProxy
+        entry = cast(configparser.SectionProxy, parse_desktop_file(file))
         if entry is None:
             continue
 
         game_data = parse_entry(entry)
         if game_data is None:
             continue
+
+        gameid: str
+        name: str
         gameid, name = game_data
 
         try:
@@ -69,16 +79,13 @@ def main():
         except Exception:
             continue
 
-    try:
+    if len(list(desktop_dir.iterdir())) == 0:
         desktop_dir.rmdir()
-    except OSError:
-        print(
-            "Desktop directory is not empty. The following files were found:",
-            file=sys.stderr,
-        )
-        for file in desktop_dir.iterdir():
-            print(file.name, file=sys.stderr)
-        return 2
+
+
+def main():
+    if desktop_dir.exists():
+        read_desktop_dir()
 
 
 if __name__ == "__main__":
